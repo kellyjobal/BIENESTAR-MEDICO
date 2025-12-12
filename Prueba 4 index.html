@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8" />
+  <title>Dashboard Documentos y Pólizas</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+
+  <style>
+    /* --- (mantengo exactamente tu CSS original) --- */
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Tahoma,Verdana,sans-serif;background:#FAFBFC;height:100vh;overflow:hidden;}
+    .app-container{display:flex;height:100vh}
+    .sidebar{width:250px;background:#00A3D9;color:#fff;flex-shrink:0;overflow-y:auto;box-shadow:2px 0 10px rgba(0,0,0,.1);}
+    .sidebar-header-1{padding:20px;background:#FFFFFF}
+    .sidebar-header{padding:20px;background:#BED600;}
+    .sidebar-header h1{font-size:1.1rem;text-align:center;color:#00A3D9}
+    .nav-menu{list-style:none;padding:20px 0}
+    .nav-item{margin:5px 15px}
+    .nav-link{display:flex;align-items:center;padding:12px 15px;color:rgba(255,255,255,1);text-decoration:none;border-radius:8px;cursor:pointer;}
+    .nav-link.active{background:#007BA3;}
+    .main-content{flex:1;overflow-y:auto;background:#FAFBFC}
+    .content-header{background:#fff;padding:20px 30px;border-bottom:1px solid #e9ecef}
+    .content-header h2{color:#2E86AB;}
+    .content-body{padding:30px;}
+    .card{background:#fff;border-radius:12px;padding:0;margin-bottom:20px;border:1px solid #E5F2F7;box-shadow:0 4px 6px rgba(0,0,0,.06);}
+    .card-header{padding:16px 20px;background:#E5F2F7;border-bottom:1px solid #E5F2F7;color:#2E86AB;font-weight:600;}
+    .card-body{padding:18px 20px}
+    .metric-grid {display: grid;grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));gap: 20px;margin-bottom: 20px;text-align: center;}
+    .metric-card {background: #E5F2F7;padding: 20px;border-radius: 10px;box-shadow: 0 2px 4px rgba(0,0,0,.05);border-left: 5px solid #00A3D9;}
+    .metric-card h3 {font-size: 2.5rem;color: #00A3D9;margin-bottom: 5px;}
+    .metric-card p {color: #2E86AB;font-weight: 600;text-transform: uppercase;font-size: 0.85rem;}
+    .chart-grid {display: grid;grid-template-columns: 1fr 1fr;gap: 20px;}
+    .contenedor-tabla{width:100%;overflow-x:auto;margin-top:12px;border-radius:8px;max-height: 550px;overflow-y: auto;}
+    .tabla{width:100%;border-collapse:collapse;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+    .tabla thead tr{background:#00A3D9;color:#fff;font-weight:700}
+    .tabla th,.tabla td{padding:12px 15px;border-bottom:1px solid #E5F2F7}
+    .tabla tbody tr:hover {background-color: #F8FCFD;}
+    .tabla thead th {position: sticky;top: 0;background: #00A3D9;color: white;z-index: 2;}
+    .tab-content{display:none;}
+    .tab-content.active{display:block;}
+    .loading-message {text-align: center;padding: 20px;color: #00A3D9;font-size: 1.1rem;}
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <nav class="sidebar">
+      <div class="sidebar-header-1">
+        <img src="https://www.clinicaportoazul.com/wp-content/uploads/2020/12/logo-cpa-auna2.png"
+             alt="Logo"
+             style="width: 150px; display:block; margin: 0 auto 10px auto;">
+      </div>
+
+      <div class="sidebar-header">
+        <h1>CONTROL DE CUMPLIMIENTO</h1>
+      </div>
+
+      <ul class="nav-menu">
+        <li class="nav-item"><a class="nav-link active" onclick="showTab('documentos', event)">📄 Documentos</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('polizas', event)">📋 Pólizas</a></li>
+      </ul>
+    </nav>
+
+    <div class="main-content">
+      <div class="content-header"><h2 id="titulo-seccion">Control de Documentos Médicos</h2></div>
+
+      <div id="documentos" class="tab-content active">
+        <div class="content-body">
+
+          <div style="margin-bottom:20px; max-width: 350px;">
+            <label for="filtroEspecialidadDocumentos" style="font-weight: 600; color: #2E86AB; display: block; margin-bottom: 5px;">Filtrar por Especialidad:</label>
+            <select id="filtroEspecialidadDocumentos" onchange="aplicarFiltroCompleto()"
+                    style="width: 100%; padding: 10px; border: 2px solid #E5F2F7; border-radius: 8px;">
+              <option value="TODAS">-- Cargando especialidades... --</option>
+            </select>
+          </div>
+
+          <div class="metric-grid">
+            <div class="metric-card">
+              <h3 id="total-medicos">0</h3>
+              <p>Total de Médicos</p>
+            </div>
+            <div class="metric-card">
+              <h3 id="promedio-general">0%</h3>
+              <p>Promedio General de Cumplimiento</p>
+            </div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="card">
+              <div class="card-header">Cumplimiento Promedio por Especialidad</div>
+              <div class="card-body">
+                <canvas id="cumplimientoChart"></canvas>
+              </div>
+            </div>
+
+            <div class="card" style="grid-column: span 2;">
+              <div class="card-header">Detalle de Cumplimiento por Médico</div>
+              <div class="card-body">
+                <div class="contenedor-tabla">
+                  <table id="tabla-detalle" class="tabla">
+                    <thead>
+                      <tr>
+                        <th>Especialidad</th>
+                        <th>Cédula</th>
+                        <th>Nombre Completo</th>
+                        <th>Fecha Póliza RC</th>
+
+                        <!-- E → U -->
+                        <th>Hoja de vida</th>
+                        <th>Documento identidad</th>
+                        <th>Tarjeta profesional</th>
+                        <th>Diploma/Pregrado</th>
+                        <th>Diploma Especialista</th>
+                        <th>Diploma Subespecialidad</th>
+                        <th>Tribunal Ética</th>
+                        <th>Convalidación</th>
+                        <th>Inscripción Rethus</th>
+                        <th>Certificado ARL/Salud</th>
+                        <th>Rethus actualizado</th>
+                        <th>Certificado Bancario</th>
+                        <th>RUT</th>
+                        <th>Foto</th>
+                        <th>Violencia Sexual</th>
+                        <th>Donación Órganos</th>
+                        <th>Soporte Respiratorio</th>
+
+                        <th>% Cumplimiento</th>
+                      </tr>
+                    </thead>
+                    <tbody id="cuerpoTablaDocumentos">
+                      <tr><td colspan="25" class="loading-message">Cargando datos...</td></tr>
+                    </tbody>
+                  </table>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    <div id="polizas" class="tab-content">
+      <div class="content-body">
+
+        <div class="card">
+          <div class="card-header">Listado de Pólizas</div>
+          <div class="card-body">
+
+            <div class="contenedor-tabla">
+              <table class="tabla">
+                <thead>
+                  <tr>
+                    <th>Cédula</th>
+                    <th>Médico</th>
+                    <th>Especialidad</th>
+                    <th>Fecha Inicio</th>
+                    <th>Fecha Vencimiento</th>
+                    <th>Estado Póliza</th>
+                    <th>Nombre Póliza</th>
+                    <th>Monto Asegurado</th>
+                  </tr>
+                </thead>
+                <tbody id="tablaPolizasBody">
+                  <tr><td colspan="8" class="loading-message">Cargando pólizas...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+  let cumplimientoChart;
+  let datosDashboardGlobal = null;
+
+ function showTab(tabName, event) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById(tabName).classList.add('active');
+
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  if (event && event.target) event.target.classList.add('active');
+
+  document.getElementById('titulo-seccion').textContent =
+    (tabName === 'documentos') ? 'Control de Documentos Médicos' : 'Gestión de Pólizas';
+
+  if (tabName === 'documentos') cargarDatosDocumentos();
+  if (tabName === 'polizas') cargarDatosPolizas();
+  }
+
+
+  function cargarDatosDocumentos() {
+    const cuerpo = document.getElementById('cuerpoTablaDocumentos');
+    cuerpo.innerHTML = "<tr><td colspan='25' class='loading-message'>Cargando datos...</td></tr>";
+
+    google.script.run
+      .withSuccessHandler(data => {
+        console.log("getControlData -> success:", data);
+        datosDashboardGlobal = normalizeDataShape(data);
+        llenarFiltroEspecialidades(datosDashboardGlobal.especialidades || []);
+        renderDashboard(datosDashboardGlobal);
+      })
+      .withFailureHandler(err => {
+        console.error("Error al obtener datos:", err);
+        document.getElementById('cuerpoTablaDocumentos').innerHTML = `<tr><td colspan='25' style='text-align:center;color:red'>⚠️ Error: ${err.message || err}</td></tr>`;
+      })
+      .getControlData();
+  }
+
+  // Normaliza distintas formas que podría devolver el servidor
+  function normalizeDataShape(data) {
+    if (!data) return { detalleMedicos: [], especialidades: [], promedioCumplimiento: [], totalMedicos: 0, promedioGeneral: 0 };
+
+    // Caso: ya viene con la forma esperada
+    if (data.detalleMedicos && Array.isArray(data.detalleMedicos)) return data;
+
+    // Caso: viene como {headers:[], data:[[],[]]}
+    if (Array.isArray(data.data) && Array.isArray(data.headers)) {
+      const headers = data.headers;
+      const rows = data.data;
+      const detalle = rows.map(r => {
+        // A=0 B=1 C=2 D=3 E..U = 4..20 V=21
+        const obj = {
+          especialidad: r[0] || "",
+          cedula: r[1] || "",
+          nombre: r[2] || "",
+          fechaPoliza: r[3] || ""
+        };
+        for (let i = 4; i <= 20; i++) {
+          const letter = String.fromCharCode(65 + i);
+          obj[letter] = r[i] || "";
+        }
+        obj.cumplimiento = r[21] ? r[21].toString() : "";
+        return obj;
+      });
+
+      // calcular resumen
+      const especialidades = [...new Set(detalle.map(d => d.especialidad).filter(x => x && x !== ""))];
+      const promedioCumplimiento = especialidades.map(esp => {
+        const m = detalle.filter(x => x.especialidad === esp);
+        const suma = m.reduce((s, it) => s + parseFloat((it.cumplimiento || "0").toString().replace("%","")), 0);
+        return m.length ? parseFloat((suma / m.length).toFixed(1)) : 0;
+      });
+      const totalMedicos = detalle.length;
+      const sumaTotal = detalle.reduce((s, it) => s + parseFloat((it.cumplimiento || "0").toString().replace("%","")), 0);
+      const promedioGeneral = totalMedicos ? parseFloat((sumaTotal / totalMedicos).toFixed(1)) : 0;
+
+      return {
+        detalleMedicos: detalle,
+        especialidades,
+        promedioCumplimiento,
+        totalMedicos,
+        promedioGeneral
+      };
+    }
+
+    // Caso: ya viene detalleMedicos pero campos E..U pueden ser booleanos/links/texto
+    if (data.detalleMedicos) {
+      // asegurar formato de cumplimiento
+      data.detalleMedicos = data.detalleMedicos.map(m => {
+        // convertir cumplimiento a string sin %
+        if (m.cumplimiento && typeof m.cumplimiento === "number") m.cumplimiento = m.cumplimiento.toString();
+        if (m.cumplimiento && m.cumplimiento.toString().indexOf("%") === -1) m.cumplimiento = m.cumplimiento.toString();
+        return m;
+      });
+      return data;
+    }
+
+    // Fallback vacío
+    return { detalleMedicos: [], especialidades: [], promedioCumplimiento: [], totalMedicos: 0, promedioGeneral: 0 };
+  }
+
+  function llenarFiltroEspecialidades(especialidades) {
+    const filtro = document.getElementById('filtroEspecialidadDocumentos');
+    filtro.innerHTML = '<option value="TODAS">-- Todas las Especialidades --</option>';
+    const unicas = [...new Set(especialidades)].sort();
+    unicas.forEach(e => {
+      if (e && e.toString().trim() !== "") filtro.innerHTML += `<option value="${e}">${e}</option>`;
+    });
+  }
+
+  function aplicarFiltroCompleto() {
+    if (!datosDashboardGlobal) return;
+    const esp = document.getElementById('filtroEspecialidadDocumentos').value;
+    if (esp === "TODAS") {
+      renderDashboard(datosDashboardGlobal);
+      return;
+    }
+    const filtrados = datosDashboardGlobal.detalleMedicos.filter(m => m.especialidad === esp);
+    const dataNew = {
+      detalleMedicos: filtrados,
+      especialidades: [esp],
+      promedioCumplimiento: datosDashboardGlobal.promedioCumplimiento || [],
+      totalMedicos: filtrados.length,
+      promedioGeneral: datosDashboardGlobal.promedioGeneral
+    };
+    renderDashboard(dataNew);
+  }
+
+  function formatCellValueForDisplay(val) {
+    // Si la celda ya trae un chulito o una X, respetar
+    if (val === "✔" || val === "✘" || val === "✔️" || val === "✘️") return val;
+    // Si es string que comienza con http (link) -> chulito
+    if (typeof val === "string" && val.trim().toLowerCase().startsWith("http")) return "✔️";
+    // Si no está vacío -> mostrar chulito también (el user dijo que link->✔)
+    if (val !== null && val !== undefined && val.toString().trim() !== "") return "✔️";
+    return "✘";
+  }
+
+  function renderDashboard(data) {
+    console.log("renderDashboard data:", data);
+    document.getElementById('total-medicos').textContent = data.totalMedicos || '0';
+    document.getElementById('promedio-general').textContent = (data.promedioGeneral || '0') + '%';
+
+    const cuerpo = document.getElementById('cuerpoTablaDocumentos');
+    cuerpo.innerHTML = "";
+
+    if (!data.detalleMedicos || data.detalleMedicos.length === 0) {
+      cuerpo.innerHTML = "<tr><td colspan='25' class='loading-message'>No hay datos.</td></tr>";
+      return;
+    }
+
+    data.detalleMedicos.forEach(m => {
+      const tr = document.createElement("tr");
+
+      const fields = [
+        m.especialidad || "",
+        m.cedula || "",
+        m.nombre || "",
+        m.fechaPoliza || "",
+
+        // E → U
+        m.E || "", m.F || "", m.G || "", m.H || "", m.I || "", m.J || "", m.K || "", m.L || "",
+        m.M || "", m.N || "", m.O || "", m.P || "", m.Q || "", m.R || "", m.S || "", m.T || "", m.U || "",
+
+        // cumplimiento
+        (m.cumplimiento !== undefined && m.cumplimiento !== null) ? m.cumplimiento + (m.cumplimiento.toString().includes("%") ? "" : "%") : "0%"
+      ];
+
+      fields.forEach((val, idx) => {
+        const td = document.createElement("td");
+        // columnas E..U corresponden a índices 4..20 en fields (0-based)
+        if (idx >= 4 && idx <= 20) {
+          td.textContent = formatCellValueForDisplay(val);
+        } else {
+          td.textContent = val;
+        }
+        tr.appendChild(td);
+      });
+
+      cuerpo.appendChild(tr);
+    });
+
+    // Gráfico
+    try {
+      const ctx = document.getElementById('cumplimientoChart').getContext('2d');
+      if (cumplimientoChart) cumplimientoChart.destroy();
+      cumplimientoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.especialidades || [],
+          datasets: [{
+            label: 'Cumplimiento (%)',
+            data: data.promedioCumplimiento || [],
+            backgroundColor: '#00A3D9'
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    } catch (e) {
+      console.error("Error al dibujar gráfico:", e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    showTab('documentos');
+  });
+
+  function cargarDatosPolizas() {
+    const cuerpo = document.getElementById('tablaPolizasBody');
+    cuerpo.innerHTML = "<tr><td colspan='8' class='loading-message'>Cargando pólizas...</td></tr>";
+
+    google.script.run
+      .withSuccessHandler(res => {
+        // res puede venir como { headers: [...], data: [...] } por nuestra función en code.gs
+        if (!res) {
+          cuerpo.innerHTML = "<tr><td colspan='8' class='loading-message'>No hay datos.</td></tr>";
+          return;
+        }
+
+        const headers = Array.isArray(res.headers) ? res.headers : [];
+        const rows = Array.isArray(res.data) ? res.data : [];
+
+        if (rows.length === 0) {
+          cuerpo.innerHTML = "<tr><td colspan='8' class='loading-message'>No hay datos.</td></tr>";
+          return;
+        }
+
+        // Lista de columnas que queremos mostrar (en ese orden)
+        const required = [
+          "Cedula", "Cédula", "Cedúla", // variantes
+          "Médico", "Medico",
+          "Especialidad",
+          "Fecha de Inicio", "Fecha Inicio", "FechaInicio",
+          "Fecha de Vencimiento", "Fecha Vencimiento", "FechaVencimiento",
+          "Estado Poliza", "Estado Póliza", "Estado",
+          "Nombre de La Poliza", "Nombre Poliza", "Nombre Póliza", "Poliza",
+          "Monto asegurado", "Monto Asegurado", "Monto"
+        ];
+
+        // Normalizador simple: elimina tildes, espacios y pasa a minúsculas
+        function normalize(s) {
+          if (!s && s !== 0) return "";
+          return String(s).toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar tildes
+            .replace(/[^a-z0-9]/g, ""); // quitar espacios y caracteres no alfanuméricos
+        }
+
+        // Crear mapa de encabezado normalizado -> encabezado real
+        const headerMap = {};
+        headers.forEach(h => {
+          headerMap[normalize(h)] = h;
+        });
+
+        // Función para encontrar el encabezado real que corresponda a una lista de variantes
+        function findHeader(variants) {
+          for (const v of variants) {
+            const n = normalize(v);
+            if (headerMap[n]) return headerMap[n];
+          }
+          return null;
+        }
+
+        // Definir, en orden, las claves a mostrar: para cada “campo lógico” buscamos variantes
+        const fieldSpecs = [
+          ["Cedula","Cédula"],
+          ["Médico","Medico"],
+          ["Especialidad"],
+          ["Fecha de Inicio","Fecha Inicio"],
+          ["Fecha de Vencimiento","Fecha Vencimiento"],
+          ["Estado Poliza","Estado Póliza","Estado"],
+          ["Nombre de La Poliza","Nombre Poliza","Poliza"],
+          ["Monto asegurado","Monto Asegurado","Monto"]
+        ];
+
+        const selectedHeaders = fieldSpecs.map(variants => {
+          const found = findHeader(variants);
+          return found; // puede ser null si no existe
+        });
+
+        // Renderizar filas
+        cuerpo.innerHTML = "";
+        rows.forEach(obj => {
+          const tr = document.createElement("tr");
+
+          // para cada selected header, obtener el valor del objeto (obj[headerName])
+          selectedHeaders.forEach((hdr, i) => {
+            const td = document.createElement("td");
+            let val = "";
+            if (hdr && (typeof obj[hdr] !== 'undefined')) val = obj[hdr];
+            // formateos mínimos
+            if (val === null || typeof val === 'undefined') val = "";
+            td.textContent = val;
+            tr.appendChild(td);
+          });
+
+          cuerpo.appendChild(tr);
+        });
+        resaltarPolizasEstado();
+
+      })
+      .withFailureHandler(err => {
+        const cuerpo = document.getElementById('tablaPolizasBody');
+        cuerpo.innerHTML = `<tr><td colspan='8' style='text-align:center;color:red'>⚠️ Error: ${err.message || err}</td></tr>`;
+        console.error("Error cargarPolizas:", err);
+      })
+      .getPolizasData();
+  }
+  // ⭐ Colorea las celdas según el estado de póliza
+  function resaltarPolizasEstado() {
+    const tabla = document.getElementById("tablaPolizasBody");
+    if (!tabla) return;
+
+    // Recorrer filas <tr>
+    tabla.querySelectorAll("tr").forEach(row => {
+      const celdas = row.querySelectorAll("td");
+      if (celdas.length < 6) return; // asegurar que existe columna Estado
+
+      const celdaEstado = celdas[5]; // columna 6 → Estado Póliza
+      const valor = celdaEstado.textContent.trim().toLowerCase();
+
+      // 🔴 Estado = vencido
+      if (valor === "vencido" || valor === "vencida") {
+        celdaEstado.style.backgroundColor = "#ffcccc";
+        celdaEstado.style.color = "#960000";
+        celdaEstado.style.fontWeight = "bold";
+        celdaEstado.style.borderRadius = "4px";
+      }
+
+      // 🟢 Estado = vigente
+      else if (valor === "vigente") {
+        celdaEstado.style.backgroundColor = "#ccffcc";
+        celdaEstado.style.color = "#006600";
+        celdaEstado.style.fontWeight = "bold";
+        celdaEstado.style.borderRadius = "4px";
+      }
+    });
+  }
+
+
+</script>
+
+</body>
+</html>
